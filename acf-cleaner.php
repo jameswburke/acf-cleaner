@@ -9,35 +9,25 @@
  * License: GPL2
  */
 
-add_action( 'admin_init', 'my_plugin_admin_init' );
 add_action('admin_menu', 'my_plugin_menu');
 
-function my_plugin_admin_init() {
-	wp_register_script( 'my-plugin-script', plugins_url( '/script.js', __FILE__ ) );
-}
-
-function my_plugin_admin_scripts() {
-        /* Link our already registered script to a page */
-        wp_enqueue_script( 'my-plugin-script' );
-    }
-
 function my_plugin_menu() {
+	wp_enqueue_script('waypoints', plugins_url().'/acf-cleaner/script.js', array('jquery'), null, true);
 	add_submenu_page('tools.php', 'ACF Cleaner', 'ACF Cleaner', 'administrator', 'acf-cleaner', 'acf_cleaner');
 
 }
 
 function acf_cleaner() {
 	global $wpdb;
-	wp_enqueue_script( 'acf-cleaner-script', plugins_url().'/acf-cleaner/script.js', array('jQuery'), false, true );
 
 	echo '<div class="wrap"><div id="icon-tools" class="icon32"></div>';
 		echo '<h2>ACF Cleaner</h2>';
 
 		echo '<h3>Post Meta</h3>';
-		echo generate_table($wpdb->get_results(postmeta_fields()));
+		echo generate_table('post', $wpdb->get_results(postmeta_fields()));
 
 		echo '<h3>User Meta</h3>';
-		echo generate_table($wpdb->get_results(postmeta_fields('wp_usermeta')));
+		echo generate_table('user', $wpdb->get_results(postmeta_fields('wp_usermeta')));
 	echo '</div>';
 }
 
@@ -53,22 +43,49 @@ function postmeta_fields($table = 'wp_postmeta'){
 
 }
 
-function generate_table($results){
-	$output .= '<table>';
-		$output .= '<thead>';
-			$output .= '<tr>';
-				$output .= '<th>Meta Key</th>';
-				$output .= '<th></th>';
-			$output .= '</tr>';
-		$output .= '</thead>';
-		$output .= '<tbody>';
-			foreach($results as $result){
+function generate_table($type, $results){
+	if(sizeof($results) > 0){
+		$output .= '<table>';
+			$output .= '<thead>';
 				$output .= '<tr>';
-				$output .= '<td>'.substr($result->meta_key, 1).'</td>';
-				$output .= '<td><a href="#">Delete</a></td>';
+					$output .= '<th>Meta Key</th>';
+					$output .= '<th></th>';
 				$output .= '</tr>';
-			}
-		$output .= '</tbody>';
-	$output .= '</table>';
+			$output .= '</thead>';
+			$output .= '<tbody>';
+				foreach($results as $result){
+					$output .= '<tr>';
+					$output .= '<td>'.substr($result->meta_key, 1).'</td>';
+					$output .= '<td><a href="#" data-key="'.substr($result->meta_key, 1).'" data-type="'.$type.'" class="acf-cleaner-delete">Delete</a></td>';
+					$output .= '</tr>';
+				}
+					
+			$output .= '</tbody>';
+		$output .= '</table>';
+	}else{
+		$output .= '<p>All custom fields empty.</p>';
+	}
 	return $output;
+}
+
+add_action( 'wp_ajax_remove_meta_tags', 'remove_meta_tags' );
+function remove_meta_tags(){
+	header('Content-Type: application/json');
+	http_response_code(200);
+	$errors = array();
+
+	if($_POST['type'] === 'post'){
+		delete_post_meta_by_key( $_POST['key'] );
+		delete_post_meta_by_key( '_'.$_POST['key'] );
+
+	}else if($_POST['type'] === 'user'){
+		$users = get_users();
+		foreach ($users as $user) {
+			delete_user_meta($user->ID, $_POST['key']);
+			delete_user_meta($user->ID, '_'.$_POST['key']);
+		}
+	}
+
+	echo json_encode(array('status' => 'Finished'));
+	die();
 }
